@@ -1,0 +1,173 @@
+import time
+from . import Sample, UPS
+import minimalmodbus
+
+class MustPV1800(UPS):
+    def __init__(self, device_path: str):
+        super().__init__(device_path, 4, 19200)
+
+        # Определение 
+        self.work_states = {
+            0: "PowerOn",
+            1: "SelfTest",
+            2: "OffGrid",
+            3: "GridTie",
+            4: "ByPass",
+            5: "Stop",
+            6: "GridCharging",
+        }
+        self.charging_states = {
+            0: "Stop",
+            1: "Absorb charge",
+            2: "Float charge",
+            3: "EQ charge",
+        }
+        self.mppt_states = {
+            0: "Stop",
+            1: "MPPT",
+            2: "Current limiting",
+        }
+
+    def extract_register_data(self, registers: list[int], mapping: dict) -> dict:
+        if len(registers) < max(mapping.values()):
+            print(f"Warning: not enough registers. Expected {max(mapping.values())}, got {len(registers)}.")
+            return {key: None for key in mapping.keys()}  # Возвращаем None, если регистры не дотягивают
+        return {key: registers[index] for key, index in mapping.items()}
+
+    def sample(self) -> Sample:
+        try:
+            # Чтение 40 регистров с паузой между запросами
+            main_registers = []
+            main_registers.extend(self.scc.read_registers(25200, 75))
+            time.sleep(0.1)  # Пауза между запросами
+            solar_registers = self.scc.read_registers(15200, 20)
+            time.sleep(0.1)  # Пауза между запросами
+            battery_registers = self.scc.read_registers(20100, 30)
+
+            # Маппинг
+            main_mapping = {
+                "work_state": 1,
+                "battery_voltage": 5,
+                "inverter_voltage": 6,
+                "grid_voltage": 7,
+                "inverter_current": 10,
+                "grid_current": 11,
+                "load_current": 12,
+                "grid_power": 14,
+                "load_power": 15,
+                "load_percent": 16,
+                "inverter_frequency": 25,
+                "grid_frequency": 26,
+                "ac_radiator_temperature": 33,
+                "transformer_temperature": 34,
+                "dc_radiator_temperature": 35,
+                "accumulated_charger_power": 45,
+                "accumulated_discharger_power": 47,
+                "accumulated_buy_power": 49,
+                "accumulated_sell_power": 51,
+                "accumulated_load_power": 53,
+                "accumulated_self_use_power": 55,
+                "accumulated_pv_sell_power": 57,
+                "accumulated_grid_charger_power": 59,
+                "battery_power": 73,
+                "battery_current": 74,
+            }
+            solar_mapping = {
+                "charging_state": 1,
+                "mppt_state": 2,
+                "pv_voltage": 5,
+                "ch_charger_current": 8,
+                "charger_power": 8,
+                "radiator_temperature": 9,
+                "accumulated_power": 17,
+            }
+            battery_mapping = {
+                "bat_stop_discharging_v": 18,
+                "bat_stop_charging_v": 19,
+                "bat_low_voltage": 27,           # Низкий уровень напряжения батареи
+            }
+            
+            # Обработка данных
+            main_data = self.extract_register_data(main_registers, main_mapping)
+            solar_data = self.extract_register_data(solar_registers, solar_mapping)
+            battery_data = self.extract_register_data(battery_registers, battery_mapping)
+
+            # Возврат данных
+
+            # Коррекции 
+            if main_data["battery_current"] > 32768:
+                main_data["battery_current"] -= 65536
+            # Коррекция grid_power
+
+            if main_data["grid_power"] > 32768:
+                main_data["grid_power"] -= 65536
+                
+            # Коррекция battery_power    
+            if main_data["battery_power"] > 32768:
+                main_data["battery_power"] -= 65536
+ 
+
+            # Преобразование
+            work_state = self.work_states.get(main_data["work_state"], "Unknown")
+            charging_state = self.charging_states.get(solar_data["charging_state"], "Unknown")
+            mppt_state = self.mppt_states.get(solar_data["mppt_state"], "Unknown") 
+
+
+            # Пройти по всем значениям main_data и исправить отрицательные числа
+            for key, value in main_data.items():
+                if isinstance(value, (int, float)) and value < 0:
+                    main_data[key] = abs(value)
+
+            # Обработка solar_data аналогично
+            for key, value in solar_data.items():
+                if isinstance(value, (int, float)) and value < 0:
+                    solar_data[key] = abs(value)
+
+            # Обработка battery_data аналогично
+            for key, value in battery_data.items():
+                if isinstance(value, (int, float)) and value < 0:
+                    battery_data[key] = abs(value)
+
+
+            return Sample(
+                main_data["battery_voltage"] / 10.0,
+                main_data["battery_current"],
+                main_data["grid_voltage"] / 10,
+                main_data["load_percent"],
+                main_data["inverter_voltage"] / 10,
+                main_data["load_power"],
+                main_data["ac_radiator_temperature"],
+                solar_data["accumulated_power"],
+                solar_data["pv_voltage"] / 10,
+                solar_data["ch_charger_current"],
+                solar_data["charger_power"],
+                solar_data["radiator_temperature"],
+                battery_data["bat_stop_discharging_v"],
+                battery_data["bat_stop_charging_v"],
+                battery_data["bat_low_voltage"],
+                main_data["inverter_current"],
+                main_data["grid_current"],
+                main_data["load_current"],
+                main_data["grid_power"],
+                main_data["inverter_frequency"] / 100,
+                main_data["grid_frequency"] / 100,
+                main_data["transformer_temperature"],
+                main_data["dc_radiator_temperature"],
+                main_data["accumulated_charger_power"],
+                main_data["accumulated_discharger_power"],
+                main_data["accumulated_buy_power"],
+                main_data["accumulated_sell_power"],
+                main_data["accumulated_load_power"],
+                main_data["accumulated_self_use_power"],
+                main_data["accumulated_pv_sell_power"],
+                main_data["accumulated_grid_charger_power"],
+                main_data["battery_power"],
+                charging_state,
+                work_state,
+                mppt_state,
+            )
+
+        except minimalmodbus.ModbusException as e:
+            print(f"Error reading registers: {e}")
+            return None
+
