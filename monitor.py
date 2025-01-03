@@ -3,13 +3,11 @@ from influxdb import InfluxDBClient
 from influxdb_client.client.write_api import SYNCHRONOUS, ASYNCHRONOUS
 
 import os
-from ups import UPS, must_ep3000, must_pv1800, must_ph18_5248
+from ups import UPS, must_pv1800
 
-
+# 
 SUPPORTED_INVERTERS = {
     "must-pv1800": must_pv1800.MustPV1800,
-    "must-ep3000": must_ep3000.MustEP3000,
-    "must-ph18-5248": must_ph18_5248.MustPH185248
 }
 
 USB_DEVICE = os.environ.get("USB_DEVICE", "/dev/ttyUSB0")

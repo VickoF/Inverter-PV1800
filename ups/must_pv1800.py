@@ -45,10 +45,12 @@ class MustPV1800(UPS):
                     # корректировка для определённых значений
                     if key in ["inverter_frequency", "grid_power", "battery_power", "battery_current"]:
                         if value > 32000:
-                            value = abs(value - 65536)  # Коррекция значений больше 65536 (16бит)
+                            value = abs(value - 65536)  
+                        if key in ["inverter_frequency", "grid_power"] and value < 0:
+                            value = abs(value) 
                     result[key] = value
             except IndexError:
-                # если индекс нет значит None
+                # если индекс ет значит None
                 result[key] = None
             except Exception as e:
                 # ошибоки если есть 
