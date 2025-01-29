@@ -64,12 +64,14 @@ class MustPV1800(UPS):
     def sample(self) -> Sample:
         try:
             # Чтение 40 регистров с паузой между запросами
-            main_registers = []
-            main_registers.extend(self.scc.read_registers(25200, 75))
+            charger_registers = self.scc.read_registers(10100, 5)
             time.sleep(0.1) 
             solar_registers = self.scc.read_registers(15200, 20)
             time.sleep(0.1)  
-            battery_registers = self.scc.read_registers(20100, 30)
+            battery_registers = self.scc.read_registers(20100, 44)
+            time.sleep(0.1) 
+            main_registers = []
+            main_registers.extend(self.scc.read_registers(25200, 75))
 
             # Маппинг
             # ключ : [индекс диапазона, множитель]
@@ -110,15 +112,24 @@ class MustPV1800(UPS):
                 "accumulated_power":                    [17, 1],
             }
             battery_mapping = {
+                "energy_use_mode":                      [9, 1],
+                "solarUse_aim":                         [12, 1],
                 "bat_stop_discharging_v":               [18, 0.1],
                 "bat_stop_charging_v":                  [19, 0.1],
-                "bat_low_voltage":                      [27, 0.1],           
+                "bat_low_voltage":                      [27, 0.1],
+                "charger_priority":                     [43, 1],
+            }
+            
+            charger_mapping = {
+                "float_volt":                           [3, 0.1],
+                "absorb_volt":                          [4, 0.1],
             }
 
             # Обработка данных
             main_data = self.extract_register_data(main_registers, main_mapping)
             solar_data = self.extract_register_data(solar_registers, solar_mapping)
             battery_data = self.extract_register_data(battery_registers, battery_mapping)
+            charger_data = self.extract_register_data(charger_registers, charger_mapping)
 
             return Sample(
                 main_data["battery_voltage"],
@@ -155,7 +166,12 @@ class MustPV1800(UPS):
                 main_data["battery_power"],
                 solar_data["charging_state"],
                 main_data["work_state"],
-                solar_data["mppt_state"],                
+                solar_data["mppt_state"],   
+                battery_data["charger_priority"],
+                battery_data["solarUse_aim"],
+                battery_data["energy_use_mode"],
+                charger_data["float_volt"],
+                charger_data["absorb_volt"],
             )
 
         except minimalmodbus.ModbusException as e:

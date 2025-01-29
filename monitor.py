@@ -1,4 +1,3 @@
-
 from influxdb import InfluxDBClient
 from influxdb_client.client.write_api import SYNCHRONOUS, ASYNCHRONOUS
 
@@ -75,11 +74,15 @@ json_body = [
             "batteryPower": sample.batteryPower,
             "ChargingState": sample.ChargingState,
             "workState": sample.workState,
-            "mpptState": sample.mpptState
+            "mpptState": sample.mpptState,
+	    "charger_priority": sample.charger_priority,
+	    "solarUse_aim": sample.solarUse_aim,
+	    "energy_use_mode": sample.energy_use_mode,
+	    "float_volt": sample.float_volt,
+	    "absorb_volt": sample.absorb_volt
         }
     }
 ]
 print(json_body)
 
 client.write_points(json_body)
-

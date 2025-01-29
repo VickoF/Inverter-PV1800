@@ -38,6 +38,11 @@ class Sample(object):
     ChargingState: str
     workState: str
     mpptState: str
+    charger_priority: int
+    solarUse_aim: int
+    energy_use_mode: int
+    float_volt: float
+    absorb_volt: float
 
 class UPS(object):
     def __init__(self, device_path: str, device_id: int, baud_rate: int):
